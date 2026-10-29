@@ -11,6 +11,8 @@
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+**简体中文** | [English](README.en.md)
+
 </div>
 
 ---
