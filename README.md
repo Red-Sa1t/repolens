@@ -53,15 +53,35 @@ RepoLens 用 **RAG（检索增强生成）+ Agent** 解决这个问题：先把�
 
 ## 🎬 效果演示
 
-| 加载仓库后的对话页 | 引用式问答（本地 Ollama · llama3.2） |
+> 以下截图均为 RepoLens 讲解它自己的源码，对话模型为 DeepSeek（`deepseek-chat`），向量模型为本地 Ollama `bge-m3`。
+
+| 加载仓库后的对话页 | 💬 引用式问答 |
 | --- | --- |
 | ![对话页](docs/images/home.jpg) | ![问答](docs/images/qa.jpg) |
 
-**问答示例**（对本项目自身提问）：
+| 🤖 Agent 实时展示探索过程 | 🤖 Agent 给出的结论 |
+| --- | --- |
+| ![Agent 过程](docs/images/agent.jpg) | ![Agent 结论](docs/images/agent-answer.jpg) |
 
-> **🧑‍💻：** build_index 是如何利用缓存避免重复向量化的？
->
-> **🔭：** 先计算仓库所有文件的指纹（路径 + 大小 + 修改时间 + 切分参数），与 `meta.json` 中保存的指纹比较 [3] `repolens/index.py:75`；一致则直接从 `chunks.json` 和 `vectors.json` 加载索引，跳过切分和向量化……
+| 🗺️ 项目导览 |
+| --- |
+| ![导览](docs/images/overview.jpg) |
+
+**Agent 模式示例**（命令行，`--agent`）：
+
+```text
+$ python -m repolens ask . "用户在网页里提交一个问题（检索问答模式），到最终显示答案，依次经过了哪些函数？" --agent
+  → grep_code({'pattern': 'def retriever|def build_index|class RepoIndex|has_vectors'})
+  → read_file({'path': 'repolens/index.py', 'start_line': 25, 'end_line': 60})
+  → grep_code({'pattern': 'QA_PROMPT|REWRITE_PROMPT'})
+  → read_file({'path': 'repolens/prompts.py', 'start_line': 1, 'end_line': 45})
+  ...
+### 一句话概括
+chat_tab → _chat_body → make_llm/get_chat_model → RepoAssistant.__init__（index.retriever）
+→ RepoAssistant.retrieve（to_messages → rewrite_chain.invoke → HybridRetriever._get_relevant_documents
+→ CodeBM25Retriever / similarity_search + RRF）→ RepoAssistant.stream_answer（format_docs → qa_chain.stream
+→ st.write_stream）→ render_sources → 写入 ss.history
+```
 
 ## 🏗️ 系统架构
 
