@@ -18,7 +18,8 @@ from .loader import RepoInfo, build_tree, iter_repo_files, load_documents, resol
 from .retriever import CodeBM25Retriever, HybridRetriever
 from .splitter import split_documents
 
-ProgressFn = Callable[[float, str], None]
+# 进度回调：report(进度 0~1, 阶段代码, **参数)，由界面/CLI 自行翻译成文字
+ProgressFn = Callable[..., None]
 INDEX_VERSION = 1
 EMBED_BATCH = 32
 
@@ -40,6 +41,10 @@ class RepoIndex:
             self._bm25 = CodeBM25Retriever(docs=self.chunks)
         return HybridRetriever(bm25=self._bm25, vector_store=self.vector_store, k=k)
 
+    @property
+    def id(self) -> str:
+        return self.stats.get("id", "")
+
     def tree(self, max_depth: int = 3) -> str:
         return build_tree(self.repo.root, max_depth=max_depth)
 
@@ -57,9 +62,30 @@ def _fingerprint(root: Path, settings: Settings) -> str:
     return h.hexdigest()
 
 
+def repo_id(repo: RepoInfo) -> str:
+    return f"{repo.name}-{hashlib.md5(str(repo.root).lower().encode()).hexdigest()[:10]}"
+
+
 def _index_dir(repo: RepoInfo, settings: Settings) -> Path:
-    key = hashlib.md5(str(repo.root).lower().encode()).hexdigest()[:10]
-    return settings.cache_dir / "index" / f"{repo.name}-{key}"
+    return settings.cache_dir / "index" / repo_id(repo)
+
+
+def list_cached(settings: Settings) -> list[dict]:
+    """列出已缓存的仓库索引（最近使用的在前），供界面“最近打开”使用。"""
+    out = []
+    for meta_path in (settings.cache_dir / "index").glob("*/meta.json"):
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        out.append({
+            "id": meta_path.parent.name,
+            "name": meta.get("name") or meta_path.parent.name.rsplit("-", 1)[0],
+            "source": meta.get("source", ""),
+            "stats": meta.get("stats", {}),
+            "updated": meta_path.stat().st_mtime,
+        })
+    return sorted(out, key=lambda m: m["updated"], reverse=True)
 
 
 def _compute_stats(docs: list[Document], chunks: list[Document]) -> dict:
@@ -73,9 +99,9 @@ def _compute_stats(docs: list[Document], chunks: list[Document]) -> dict:
 
 
 def build_index(source: str, settings: Settings, progress: ProgressFn | None = None, force: bool = False) -> RepoIndex:
-    report = progress or (lambda *_: None)
+    report = progress or (lambda *_a, **_k: None)
 
-    report(0.02, "解析仓库地址…")
+    report(0.02, "resolve")
     repo = resolve_repo(source, settings.cache_dir)
     out = _index_dir(repo, settings)
     fp = _fingerprint(repo.root, settings)
@@ -86,18 +112,18 @@ def build_index(source: str, settings: Settings, progress: ProgressFn | None = N
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         want_vectors = embeddings is not None
         if meta.get("fingerprint") == fp and meta.get("has_vectors") == want_vectors:
-            report(0.5, "命中缓存，加载索引…")
+            report(0.5, "cache")
             chunks = [Document(**d) for d in json.loads((out / "chunks.json").read_text(encoding="utf-8"))]
             vs = InMemoryVectorStore.load(str(out / "vectors.json"), embeddings) if want_vectors else None
-            report(1.0, "索引已就绪（缓存）")
-            return RepoIndex(repo, chunks, vs, meta["stats"] | {"cached": True})
+            report(1.0, "done")
+            return RepoIndex(repo, chunks, vs, meta["stats"] | {"cached": True, "id": repo_id(repo)})
 
-    report(0.08, "读取源码文件…")
+    report(0.08, "read")
     docs = load_documents(repo, settings.max_file_bytes, settings.max_files)
     if not docs:
         raise RuntimeError("仓库中没有找到可索引的源码或文档文件。")
 
-    report(0.15, f"语法感知切分 {len(docs)} 个文件…")
+    report(0.15, "split", files=len(docs))
     chunks = split_documents(docs, settings.chunk_size, settings.chunk_overlap)
 
     vs = None
@@ -116,9 +142,9 @@ def build_index(source: str, settings: Settings, progress: ProgressFn | None = N
                 }
             )
             done = min(i + EMBED_BATCH, total)
-            report(0.2 + 0.75 * done / total, f"本地向量化 {done}/{total} 个代码块…")
+            report(0.2 + 0.75 * done / total, "embed", done=done, total=total)
     else:
-        report(0.9, "未检测到 Ollama 向量模型，降级为 BM25 关键词检索")
+        report(0.9, "bm25_only")
 
     stats = _compute_stats(docs, chunks)
     out.mkdir(parents=True, exist_ok=True)
@@ -129,8 +155,11 @@ def build_index(source: str, settings: Settings, progress: ProgressFn | None = N
     if vs is not None:
         vs.dump(str(out / "vectors.json"))
     meta_path.write_text(
-        json.dumps({"fingerprint": fp, "has_vectors": vs is not None, "stats": stats, "source": repo.source}, ensure_ascii=False),
+        json.dumps(
+            {"fingerprint": fp, "has_vectors": vs is not None, "stats": stats, "source": repo.source, "name": repo.name},
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
-    report(1.0, "索引构建完成")
-    return RepoIndex(repo, chunks, vs, stats | {"cached": False})
+    report(1.0, "done")
+    return RepoIndex(repo, chunks, vs, stats | {"cached": False, "id": repo_id(repo)})

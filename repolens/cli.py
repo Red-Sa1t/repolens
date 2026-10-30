@@ -12,7 +12,19 @@ from .index import build_index
 from .llm import get_chat_model
 
 
-def _progress(p: float, msg: str) -> None:
+PROGRESS_TEXT = {
+    "resolve": "解析仓库地址…",
+    "cache": "命中缓存，加载索引…",
+    "read": "读取源码文件…",
+    "split": "语法感知切分 {files} 个文件…",
+    "embed": "本地向量化 {done}/{total} 个代码块…",
+    "bm25_only": "未检测到本地向量模型，降级为 BM25",
+    "done": "索引已就绪",
+}
+
+
+def _progress(p: float, key: str, **kw) -> None:
+    msg = PROGRESS_TEXT.get(key, key).format(**kw)
     print(f"\r[{p * 100:5.1f}%] {msg:<40}", end="", file=sys.stderr, flush=True)
     if p >= 1:
         print(file=sys.stderr)
@@ -35,7 +47,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="repolens", description="RepoLens —— 基于 LangChain 的代码仓库讲解员")
     parser.add_argument("--provider", choices=["deepseek", "ollama"], help="对话模型来源（默认读取 .env）")
     parser.add_argument("--model", help="模型名，如 deepseek-chat / llama3.2")
+    parser.add_argument("--lang", choices=["zh", "en"], default="zh", help="回答语言")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("serve", help="启动 Web 界面")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
 
     p = sub.add_parser("index", help="构建或刷新仓库索引")
     p.add_argument("repo")
@@ -58,6 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--agent", action="store_true")
 
     args = parser.parse_args(argv)
+    if args.cmd == "serve":
+        import uvicorn
+
+        print(f"RepoLens 已启动：http://{args.host}:{args.port}", file=sys.stderr)
+        uvicorn.run("repolens.server:app", host=args.host, port=args.port, log_level="warning")
+        return 0
     overrides = {"provider": args.provider}
     if args.model:
         overrides["deepseek_model" if (args.provider or get_settings().provider) == "deepseek" else "ollama_model"] = args.model
@@ -73,22 +96,23 @@ def main(argv: list[str] | None = None) -> int:
     llm = get_chat_model(settings)
     if args.cmd == "ask":
         if args.agent:
-            for ev in RepoAgent(index, llm).stream(args.question):
+            for ev in RepoAgent(index, llm, lang=args.lang).stream(args.question):
                 if ev.kind == "tool_call":
                     print(f"  → {ev.name}({ev.args})", file=sys.stderr)
                 elif ev.kind == "answer":
                     print(ev.content)
         else:
-            assistant = RepoAssistant(index, llm, k=settings.top_k)
+            assistant = RepoAssistant(index, llm, k=settings.top_k, lang=args.lang)
             r = assistant.retrieve(args.question)
             _print_stream(assistant.stream_answer(args.question, r))
             print("\n参考片段：", *(f"  {d.metadata['source']}:L{d.metadata['start_line']}" for d in r.docs), sep="\n")
     elif args.cmd == "overview":
-        _print_stream(RepoAssistant(index, llm).stream_overview())
+        _print_stream(RepoAssistant(index, llm, lang=args.lang).stream_overview())
     elif args.cmd == "explain":
-        _print_stream(RepoAssistant(index, llm).stream_explain_file(args.file))
+        _print_stream(RepoAssistant(index, llm, lang=args.lang).stream_explain_file(args.file))
     elif args.cmd == "chat":
-        assistant, agent = RepoAssistant(index, llm, k=settings.top_k), RepoAgent(index, llm) if args.agent else None
+        assistant = RepoAssistant(index, llm, k=settings.top_k, lang=args.lang)
+        agent = RepoAgent(index, llm, lang=args.lang) if args.agent else None
         history: list[dict] = []
         print("输入问题开始对话，输入 exit 退出。")
         while True:

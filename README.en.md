@@ -4,14 +4,16 @@
 
 **Point it at a local folder or a GitHub URL. It reads the whole repository, answers your questions, and cites the exact `file:line`.**
 
-Built on **LangChain 1.x** · switch between online **DeepSeek** and local **Ollama** in one click · code embeddings are computed entirely on your machine
+Built on **LangChain 1.x** · switch between online **DeepSeek** and local **Ollama** in one click · bilingual UI · code embeddings computed entirely on your machine
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1.x-1C3C3C?logo=langchain)
-![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 [简体中文](README.md) | **English**
+
+![RepoLens home](docs/images/en/01-welcome.png)
 
 </div>
 
@@ -39,53 +41,48 @@ When you join a team, pick up an open-source project, or review a classmate's as
 - Finding "where login is handled" means a global search and opening files one by one.
 - Pasting the code into a chatbot? The repo is too big to fit, and the model tends to **make up code that doesn't exist**.
 
-RepoLens tackles this with **RAG (retrieval-augmented generation) + an agent**. It splits the repository along syntax boundaries and builds a local index. The model then answers **only from the real code it retrieved**, and every claim comes with a source you can check.
-
-> **Language note:** the prompts are written for Chinese-speaking users, so answers come back in Simplified Chinese by default. To get English answers, change the language instruction in `repolens/prompts.py` (`SYSTEM_BASE`, `QA_PROMPT` and `AGENT_SYSTEM`).
+RepoLens tackles this with **RAG (retrieval-augmented generation) + an agent**. It splits the repository along syntax boundaries and builds a local index. The model then answers **only from the real code it retrieved**, and every claim links to a source you can click and check.
 
 ## ✨ Features
 
 | Feature | Description |
 | --- | --- |
-| 💬 **Cited Q&A** | Hybrid BM25 + vector retrieval finds the most relevant code chunks. Answers are tagged with `[n] path:line`, and you can expand each source to check it. Follow-up questions are rewritten automatically using the chat history |
-| 🤖 **Agent exploration** | The model calls four tools on its own (`search_code`, `grep_code`, `list_directory`, `read_file`) to trace call chains over several steps. The UI shows every step live |
-| 🗺️ **Project tour** | Reads the directory tree, README, dependency manifests and entry files, then writes an onboarding guide: tech stack, directory walkthrough, module responsibility table, how to run it, and a suggested reading order. Exportable as Markdown |
-| 📄 **File explainer** | View any file with line numbers, get a function-by-function explanation, and see where it is referenced elsewhere in the repo |
+| 💬 **Cited Q&A** | Hybrid BM25 + vector retrieval finds the most relevant code. Every `[n]` and `path:line` in an answer is clickable and opens the source in a side drawer with the cited lines highlighted. Follow-up questions are rewritten automatically using the chat history |
+| 🤖 **Agent exploration** | The model calls four tools on its own (`search_code`, `grep_code`, `list_directory`, `read_file`) to trace call chains over several steps. A live timeline shows each step, and the final answer streams token by token |
+| 🗺️ **Project tour** | Reads the directory tree, README, dependency manifests and entry files, then writes an onboarding guide: tech stack, directory walkthrough, module table, how to run it, and a suggested reading order. Copy it or export it as Markdown |
+| 📄 **File explainer** | A searchable file tree plus a syntax-highlighted, line-numbered code view. Get a function-by-function explanation and see where the file is referenced |
 | 🔀 **Online / offline** | Switch at any time between online DeepSeek (better quality, faster) and local Ollama (fully offline, private) |
-| ⚡ **Incremental cache** | The index is cached by a file fingerprint, so an unchanged repo loads in seconds. GitHub / Gitee repos are shallow-cloned automatically |
-| 🖥️ **Web + CLI** | A Streamlit web UI and a `python -m repolens` command-line tool |
+| 🌐 **Bilingual · light & dark** | Switch the UI and the answer language between Chinese and English in one click; light and dark themes; chats, tours and explanations are saved in the browser |
+| ⚡ **Incremental cache** | The index is cached by a file fingerprint, so an unchanged repo loads in seconds. GitHub / Gitee repos are shallow-cloned automatically; recent repos are one click away |
+| 🖥️ **Web + CLI** | A FastAPI backend with SSE streaming and a vanilla-JS single-page frontend (no build step; libraries are bundled, so it works offline), plus a `python -m repolens` command-line tool |
 
 ## 🎬 Demo
 
-> All screenshots show RepoLens explaining its own source code, with DeepSeek (`deepseek-chat`) as the chat model and local Ollama `bge-m3` as the embedding model.
+> These screenshots are generated by [`scripts/screenshots.py`](scripts/screenshots.py), which drives a real browser with Playwright. RepoLens is explaining its own source code, with DeepSeek as the chat model and local Ollama `bge-m3` for embeddings.
 
-| Chat page after loading a repo | 💬 Cited Q&A |
+**💬 Cited Q&A**: the `[n]` markers, `path:line` references and source cards are all clickable.
+
+![Cited Q&A](docs/images/en/03-ask.png)
+
+**📎 Click a citation**: a side drawer opens the source with the cited lines highlighted, and can jump to the Files view.
+
+![Citation drawer](docs/images/en/04-citation.png)
+
+**🤖 Agent exploration**: the timeline shows each tool call; expand one to see its output, or click a `read_file` argument to open that code.
+
+| Exploring (live) | Done |
 | --- | --- |
-| ![Chat page](docs/images/home.jpg) | ![Q&A](docs/images/qa.jpg) |
+| ![Agent live](docs/images/en/05-agent-live.png) | ![Agent done](docs/images/en/06-agent.png) |
 
-| 🤖 Agent exploration, shown live | 🤖 The agent's conclusion |
+**🗺️ Project tour** and **📄 File explainer**
+
+| Project tour | File explainer |
 | --- | --- |
-| ![Agent steps](docs/images/agent.jpg) | ![Agent answer](docs/images/agent-answer.jpg) |
+| ![Project tour](docs/images/en/07-tour.png) | ![File explainer](docs/images/en/08-files.png) |
 
-| 🗺️ Project tour |
-| --- |
-| ![Project tour](docs/images/overview.jpg) |
+**🌙 Dark theme**
 
-**Agent mode example** (CLI, `--agent`). The question asks which functions a question passes through, from being submitted in the web UI (Q&A mode) to the answer being displayed:
-
-```text
-$ python -m repolens ask . "用户在网页里提交一个问题（检索问答模式），到最终显示答案，依次经过了哪些函数？" --agent
-  → grep_code({'pattern': 'def retriever|def build_index|class RepoIndex|has_vectors'})
-  → read_file({'path': 'repolens/index.py', 'start_line': 25, 'end_line': 60})
-  → grep_code({'pattern': 'QA_PROMPT|REWRITE_PROMPT'})
-  → read_file({'path': 'repolens/prompts.py', 'start_line': 1, 'end_line': 45})
-  ...
-### Summary (translated)
-chat_tab → _chat_body → make_llm/get_chat_model → RepoAssistant.__init__ (index.retriever)
-→ RepoAssistant.retrieve (to_messages → rewrite_chain.invoke → HybridRetriever._get_relevant_documents
-→ CodeBM25Retriever / similarity_search + RRF) → RepoAssistant.stream_answer (format_docs → qa_chain.stream
-→ st.write_stream) → render_sources → append to ss.history
-```
+![Dark theme](docs/images/en/09-dark.png)
 
 ## 🏗️ Architecture
 
@@ -111,9 +108,12 @@ flowchart LR
     subgraph App["Application layer"]
         H --> QA[LCEL Q&A chain<br/>rewrite → retrieve → cited answer]
         H --> AG[create_agent<br/>search / grep / ls / read tools]
-        QA --> UI
-        AG --> UI
-        OV[Tour chain / file explainer chain] --> UI[Streamlit UI / CLI]
+        OV[Tour chain / file explainer chain]
+        QA --> API
+        AG --> API
+        OV --> API[FastAPI + SSE<br/>server.py]
+        API --> UI[Web single-page app<br/>web/]
+        QA --> CLI[CLI cli.py]
     end
 
     LLM{{ChatDeepSeek online<br/>ChatOllama local}} -.-> QA
@@ -125,8 +125,9 @@ flowchart LR
 
 ```
 question ──► (if there is history) rewrite into a standalone query ──► BM25 top 20   ┐
-                                                                      vector top 20 ┴─► RRF fusion, keep top 6
-         ──► format as "[n] path (Lx-Ly) + code" ──► QA prompt ──► streamed LLM output ──► answer + sources
+                                                                      vector top 20 ┴─► RRF fusion, keep top 6 (docs slightly down-weighted)
+         ──► format as "[n] path (Lx-Ly) + code" ──► QA prompt ──► streamed LLM output
+         ──► SSE events: query → sources → token… → done ──► the UI renders the answer, citation markers and source cards
 ```
 
 ## 🦜 How LangChain Is Used
@@ -138,11 +139,11 @@ question ──► (if there is history) rewrite into a standalone query ──�
 | `Embeddings` (`OllamaEmbeddings`) | Local bge-m3 embeddings; source code never leaves the machine | `llm.py` |
 | `InMemoryVectorStore` | Vector store, persisted to disk with `dump` / `load` | `index.py` |
 | Custom `BaseRetriever` | `CodeBM25Retriever` (code-aware BM25) + `HybridRetriever` (RRF fusion) | `retriever.py` |
-| `ChatPromptTemplate` + `MessagesPlaceholder` | Prompt templates for Q&A, query rewriting, project tour and file explainer, with multi-turn history | `prompts.py` |
+| `ChatPromptTemplate` + `MessagesPlaceholder` | Prompt templates for Q&A, query rewriting, project tour and file explainer, one set each for Chinese and English, with multi-turn history | `prompts.py` |
 | **LCEL** (`prompt \| llm \| parser`) | Composes the four chains and streams them with `.stream()` | `chains.py` |
-| `ChatDeepSeek` / `ChatOllama` | One interface for online and local models, switched by a single setting | `llm.py` |
+| `ChatDeepSeek` / `ChatOllama` | One interface for online and local models, chosen per request | `llm.py` |
 | `@tool` | Four repo-exploration tools with path-traversal protection | `agent.py` |
-| `create_agent` (LangChain 1.x, built on LangGraph) | ReAct-style tool-calling agent; `stream_mode="updates"` shows each step live | `agent.py` |
+| `create_agent` (LangChain 1.x, built on LangGraph) | ReAct-style tool-calling agent; subscribes to both the `messages` and `updates` streams, so tool calls show live and the answer streams token by token | `agent.py` |
 | `FakeListChatModel` / `DeterministicFakeEmbedding` | Stand in for real models in unit tests, so tests need no network | `tests/` |
 
 ## 🚀 Quick Start
@@ -183,13 +184,13 @@ ollama pull qwen2.5:7b
 cp .env.example .env
 ```
 
-Edit `.env` and set `DEEPSEEK_API_KEY`. You can also skip `.env` and enter the key in the web UI sidebar.
+Edit `.env` and set `DEEPSEEK_API_KEY`. You can also skip `.env` and enter the key in the model settings (top right of the web UI); it is stored in your browser only.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `REPOLENS_PROVIDER` | `deepseek` | Chat model provider: `deepseek` or `ollama` |
+| `REPOLENS_PROVIDER` | `deepseek` | Default chat model provider: `deepseek` or `ollama` |
 | `DEEPSEEK_API_KEY` | — | DeepSeek API key |
-| `DEEPSEEK_MODEL` | `deepseek-chat` | `deepseek-reasoner` also works |
+| `DEEPSEEK_MODEL` | `deepseek-chat` | `deepseek-reasoner` and others also work |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server address |
 | `OLLAMA_MODEL` | `llama3.2` | Local chat model |
 | `REPOLENS_EMBED_MODEL` | `bge-m3` | Local embedding model |
@@ -197,22 +198,23 @@ Edit `.env` and set `DEEPSEEK_API_KEY`. You can also skip `.env` and enter the k
 ### 5. Run
 
 ```bash
-streamlit run app.py
+python -m repolens serve
 ```
 
-Open <http://localhost:8501>. In the sidebar, pick a model, enter a repo path or GitHub URL, and click **构建索引** (Build index). No repo handy? Click **用本项目试试** (Try this project) and RepoLens will explain itself.
+Open <http://127.0.0.1:8000>, enter a repo path or GitHub URL, and click **Analyze**. No repo handy? Click **RepoLens itself** and it will explain its own code.
 
 ## 🧭 Usage
 
 ### Web UI
 
-The UI labels are in Chinese; English names are given in parentheses.
-
-1. **对话 (Chat)**: switch between two modes at the top, 💬 检索问答 (Retrieval Q&A) and 🤖 Agent 探索 (Agent exploration).
-   - Retrieval Q&A suits "where is X / what is X". One retrieval, answer in seconds.
-   - Agent exploration suits "what is the full call chain / which files do I touch to change this feature". The model searches and reads files on its own, several times.
-2. **项目导览 (Project tour)**: click ✨ 生成导览 (Generate tour) to produce an onboarding guide, exportable as Markdown.
-3. **文件讲解 (File explainer)**: pick a file. The source with line numbers is on the left; click 🧑‍🏫 讲解这个文件 (Explain this file) on the right.
+- **Chat**: switch between **Ask** and **Agent** below the input box.
+  - Ask suits "where is X / what is X". One retrieval, answer in seconds.
+  - Agent suits "what is the full call chain / which files do I touch to change this feature". The model searches and reads files on its own, several times.
+  - Click `[1]`, a `path:line` reference or a source card in an answer to open the code in the side drawer with the lines highlighted.
+  - `Enter` sends, `Shift+Enter` adds a new line, and you can stop generation at any time.
+- **Project tour**: click **Generate tour**; copy the result or export it as Markdown.
+- **Files**: search and pick a file on the left, read the highlighted source in the middle, and click **Explain file** on the right.
+- **Top right**: switch the model (DeepSeek / Ollama), the language (中 / EN; answers follow the UI language), and the light/dark theme.
 
 ### CLI
 
@@ -220,15 +222,15 @@ The UI labels are in Chinese; English names are given in parentheses.
 # Build or refresh the index
 python -m repolens index ./some-project
 
-# Ask a question (retrieval Q&A)
-python -m repolens ask ./some-project "Where is the login logic?"
+# Ask a question (retrieval Q&A); --lang en for English answers
+python -m repolens --lang en ask ./some-project "Where is the login logic?"
 
 # Ask in agent mode
-python -m repolens ask https://github.com/pallets/flask "Which functions does a request pass through from arrival to response?" --agent
+python -m repolens --lang en ask https://github.com/pallets/flask "Which functions does a request pass through from arrival to response?" --agent
 
 # Generate a project tour / explain a file
-python -m repolens overview ./some-project
-python -m repolens explain ./some-project src/app.py
+python -m repolens --lang en overview ./some-project
+python -m repolens --lang en explain ./some-project src/app.py
 
 # Interactive multi-turn chat; --provider switches the model for this run
 python -m repolens --provider ollama --model qwen2.5:7b chat ./some-project
@@ -238,7 +240,6 @@ python -m repolens --provider ollama --model qwen2.5:7b chat ./some-project
 
 ```
 repolens/
-├── app.py                 # Streamlit web UI
 ├── repolens/
 │   ├── config.py          # Settings (.env → Settings)
 │   ├── llm.py             # Model factory: ChatDeepSeek / ChatOllama / OllamaEmbeddings
@@ -246,38 +247,58 @@ repolens/
 │   ├── splitter.py        # Syntax-aware splitting + line tracking
 │   ├── retriever.py       # Code-aware BM25 retriever + RRF hybrid retriever
 │   ├── index.py           # Index building, fingerprint cache, persistence
-│   ├── prompts.py         # All prompt templates
+│   ├── prompts.py         # Chinese and English prompt templates
 │   ├── chains.py          # LCEL chains: Q&A / project tour / file explainer
-│   ├── agent.py           # Tool definitions + create_agent
-│   └── cli.py             # Command-line entry point
-├── tests/                 # pytest unit tests (no network or real models needed)
-├── docs/images/           # README screenshots
+│   ├── agent.py           # Tool definitions + create_agent (token streaming)
+│   ├── server.py          # FastAPI backend: REST + SSE streaming
+│   └── cli.py             # Command-line entry point (including serve)
+├── web/                   # Single-page frontend (no build step)
+│   ├── index.html
+│   ├── app.css            # Design tokens + light/dark themes
+│   ├── app.js             # Views, streaming rendering, citation links, file tree
+│   ├── i18n.js            # Chinese and English UI strings
+│   ├── icons.js           # Line icons
+│   └── vendor/            # marked / DOMPurify / highlight.js (bundled, works offline)
+├── scripts/screenshots.py # Automated screenshots with Playwright
+├── tests/                 # pytest: core modules + API (no network or real models needed)
+├── docs/images/           # README screenshots (zh / en)
 ├── requirements.txt
 └── .env.example
 ```
 
+**Backend API:**
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/settings` | Current model settings and Ollama / embedding status |
+| `GET /api/recent` | Recently opened repositories |
+| `POST /api/index` | Build or load an index (SSE: `progress` → `repo`) |
+| `GET /api/repos/{id}` / `GET /api/repos/{id}/file` | Repo info and file list / read a file (with path-traversal checks) |
+| `POST /api/chat` | Q&A (SSE: `query`, `sources`, `token`; agent mode adds `tool_call`, `tool_result`, `answer`) |
+| `POST /api/overview` / `POST /api/explain` | Project tour / file explainer (SSE: `token`; the explainer adds `references`) |
+
 ## 🔬 Design Notes
 
 **1. Why hybrid retrieval instead of vectors alone?**
-Code search has two kinds of queries. Some describe behavior in natural language ("where payment callbacks are handled"), which needs **semantic search**. Others name an identifier directly (`check_password`), where an embedding model is less precise than **keyword matching**. RepoLens runs both and merges them with **RRF (Reciprocal Rank Fusion)**, which works on ranks, so there are no score weights to tune.
+Code search has two kinds of queries. Some describe behavior in natural language ("where payment callbacks are handled"), which needs **semantic search**. Others name an identifier directly (`check_password`), where an embedding model is less precise than **keyword matching**. RepoLens runs both and merges them with **RRF (Reciprocal Rank Fusion)**, which works on ranks, so there are no score weights to tune. Documentation chunks such as the README get a 0.8 weight in fusion, so explanations cite the source code itself first.
 
 **2. A code-aware tokenizer.**
 The BM25 tokenizer splits `getUserName` and `get_user_name` into `get / user / name` while also keeping the whole identifier, so searching "user name" still finds camelCase functions. It uses `BM25Plus` rather than `BM25Okapi`: in tiny repos with only a few files, Okapi's IDF can drop to zero and nothing matches.
 
-**3. Citations down to the line.**
-Splitting runs with `add_start_index`, and each chunk's character offset is converted into start and end line numbers. Every `path:line` in an answer matches the original file. The file explainer also numbers the source lines, so the model can cite them accurately.
+**3. Clickable citations down to the line.**
+Splitting runs with `add_start_index`, and each chunk's character offset is converted into start and end line numbers. The frontend detects `[n]` markers and inline code like `path:line` in answers, maps them to real files in the repo, and opens the source in a drawer with those lines highlighted.
 
-**4. Privacy and offline use.**
-Embeddings always run on local Ollama, so **the full source is never sent to any embedding service**. Only the few retrieved chunks go to the chat model. If you pick Ollama for chat as well, the whole pipeline runs offline.
+**4. Streaming experience.**
+Every generation endpoint is an SSE event stream. The frontend batches rendering with `requestAnimationFrame` so it doesn't re-layout on every token. In agent mode, RepoLens subscribes to both LangGraph streams: `messages` (tokens) and `updates` (tool calls). Text the model says before a tool call becomes a "thinking" step, and the final answer streams token by token.
 
-**5. Agent safety limits.**
-`read_file` and `list_directory` resolve every path and check that it stays inside the repo root, which blocks reads like `../../etc/passwd`. Tool output is capped in length, and the agent has a maximum step count (`recursion_limit`) to prevent context blow-up and endless loops.
+**5. Privacy and offline use.**
+Embeddings always run on local Ollama, so **the full source is never sent to any embedding service**. Only the few retrieved chunks go to the chat model. Frontend libraries are bundled in `web/vendor/` instead of loaded from a CDN. If you pick Ollama for chat as well, the whole pipeline runs offline.
 
-**6. Incremental cache.**
-The fingerprint covers each file's relative path, size and modification time, plus the embedding model name and the splitting parameters. An unchanged repo loads straight from the cache; changing any file or parameter triggers a rebuild.
+**6. Agent safety limits.**
+`read_file`, `list_directory` and the file API resolve every path and check that it stays inside the repo root, which blocks reads like `../../etc/passwd`. Tool output is capped in length, and the agent has a maximum step count (`recursion_limit`) to prevent context blow-up and endless loops.
 
-**7. Graceful fallback.**
-If Ollama isn't running or the embedding model hasn't been pulled, RepoLens falls back to BM25-only retrieval. The app keeps working, and the UI shows the current retrieval mode.
+**7. Incremental cache and graceful fallback.**
+The fingerprint covers each file's relative path, size and modification time, plus the embedding model name and the splitting parameters, so an unchanged repo loads straight from the cache. If Ollama isn't running or the embedding model hasn't been pulled (checked first through an endpoint with a timeout, so requests never hang), RepoLens falls back to BM25-only retrieval and the UI shows the current mode. If the backend restarts, the frontend reloads the repo from the cache and retries the request automatically.
 
 ## 🧪 Testing
 
@@ -285,13 +306,14 @@ If Ollama isn't running or the embedding model hasn't been pulled, RepoLens fall
 pytest -q
 ```
 
-The tests use LangChain's built-in `FakeListChatModel` and `DeterministicFakeEmbedding`, so **they need no network and no API key**. They cover:
+The tests use LangChain's built-in `FakeListChatModel` and `DeterministicFakeEmbedding`, so **they need no network and no API key**. The 16 tests cover:
 
 - The code tokenizer, remote-URL detection, and ignore rules (`node_modules`, binary files, `.gitignore`)
 - Correct line numbers after splitting
 - Index building, cache hits, automatic rebuild after a file changes, and the fallback without an embedding model
 - Output of the four agent tools, and path-traversal protection
 - An end-to-end Q&A chain call and reference lookup
+- The FastAPI endpoints: index progress events, file reads and traversal blocking, the SSE streams for Q&A / tour / explainer, and the static frontend
 
 ## 🧱 Limitations and Roadmap
 

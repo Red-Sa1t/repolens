@@ -13,7 +13,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from .index import RepoIndex
 from .loader import language_of, read_text
-from .prompts import EXPLAIN_FILE_PROMPT, OVERVIEW_PROMPT, QA_PROMPT, REWRITE_PROMPT
+from .prompts import get_prompts
 
 MANIFESTS = [
     "README.md", "readme.md", "README.rst", "README", "pyproject.toml", "requirements.txt", "setup.py",
@@ -52,15 +52,16 @@ def number_lines(text: str, start: int = 1) -> str:
 
 
 class RepoAssistant:
-    def __init__(self, index: RepoIndex, llm: BaseChatModel, k: int = 6):
+    def __init__(self, index: RepoIndex, llm: BaseChatModel, k: int = 6, lang: str = "zh"):
         self.index = index
         self.llm = llm
         self.retriever = index.retriever(k)
+        self.prompts = get_prompts(lang)
         parser = StrOutputParser()
-        self.rewrite_chain = REWRITE_PROMPT | llm | parser
-        self.qa_chain = QA_PROMPT | llm | parser
-        self.overview_chain = OVERVIEW_PROMPT | llm | parser
-        self.explain_chain = EXPLAIN_FILE_PROMPT | llm | parser
+        self.rewrite_chain = self.prompts.rewrite | llm | parser
+        self.qa_chain = self.prompts.qa | llm | parser
+        self.overview_chain = self.prompts.overview | llm | parser
+        self.explain_chain = self.prompts.explain_file | llm | parser
 
     @property
     def repo_name(self) -> str:
@@ -80,7 +81,7 @@ class RepoAssistant:
         return self.qa_chain.stream(
             {
                 "repo_name": self.repo_name,
-                "context": format_docs(retrieved.docs) or "（没有检索到相关片段）",
+                "context": format_docs(retrieved.docs) or self.prompts.no_context,
                 "history": to_messages(history or []),
                 "question": question,
             }
@@ -138,7 +139,7 @@ class RepoAssistant:
         path = self.index.repo.root / rel_path
         text = read_text(path) or ""
         truncated = len(text) > max_chars
-        content = number_lines(text[:max_chars]) + ("\n...（文件过长，已截断）" if truncated else "")
+        content = number_lines(text[:max_chars]) + ("\n... (truncated)" if truncated else "")
         refs = self.references_to(rel_path)
         return self.explain_chain.stream(
             {
@@ -146,6 +147,6 @@ class RepoAssistant:
                 "path": rel_path,
                 "language": language_of(path) or "",
                 "content": content,
-                "references": "\n".join(refs) or "（未发现）",
+                "references": "\n".join(refs) or self.prompts.not_found,
             }
         )

@@ -9,13 +9,13 @@ from pathlib import Path
 
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, tool
 
 from .chains import format_docs, number_lines, to_messages
 from .index import RepoIndex
 from .loader import build_tree, read_text
-from .prompts import AGENT_SYSTEM
+from .prompts import get_prompts
 
 MAX_TOOL_OUTPUT = 6000
 
@@ -89,32 +89,44 @@ def make_tools(index: RepoIndex) -> list[BaseTool]:
 
 @dataclass
 class AgentEvent:
-    kind: str  # "tool_call" | "tool_result" | "answer"
+    # "token"：模型逐字输出；"tool_call" / "tool_result"：工具调用；"answer"：最终完整回答
+    kind: str
     name: str = ""
     content: str = ""
     args: dict | None = None
 
 
 class RepoAgent:
-    def __init__(self, index: RepoIndex, llm: BaseChatModel, max_steps: int = 24):
+    def __init__(self, index: RepoIndex, llm: BaseChatModel, max_steps: int = 24, lang: str = "zh"):
         self.index = index
         self.max_steps = max_steps
-        self.graph = create_agent(
-            llm, make_tools(index), system_prompt=AGENT_SYSTEM.format(repo_name=index.repo.name)
-        )
+        system = get_prompts(lang).agent_system.format(repo_name=index.repo.name)
+        self.graph = create_agent(llm, make_tools(index), system_prompt=system)
 
     def stream(self, question: str, history: list[dict] | None = None) -> Iterator[AgentEvent]:
+        """同时订阅 messages（逐 token）与 updates（工具调用）两种流。
+
+        模型在调用工具前说的话也会以 token 形式到达；调用方收到 tool_call 时，
+        应把此前累积的文本视为“思考过程”，最终回答以 answer 事件为准。
+        """
         messages = to_messages(history or []) + [HumanMessage(content=question)]
-        for update in self.graph.stream(
-            {"messages": messages}, {"recursion_limit": self.max_steps}, stream_mode="updates"
+        for mode, data in self.graph.stream(
+            {"messages": messages}, {"recursion_limit": self.max_steps}, stream_mode=["messages", "updates"]
         ):
-            for node_output in update.values():
+            if mode == "messages":
+                chunk, meta = data
+                if isinstance(chunk, AIMessageChunk) and meta.get("langgraph_node") == "model":
+                    text = chunk.text
+                    if text:
+                        yield AgentEvent("token", content=text)
+                continue
+            for node_output in data.values():
                 for msg in (node_output or {}).get("messages", []):
                     if isinstance(msg, AIMessage):
                         for call in msg.tool_calls:
                             yield AgentEvent("tool_call", call["name"], args=call["args"])
                         if not msg.tool_calls and msg.content:
-                            yield AgentEvent("answer", content=msg.text if hasattr(msg, "text") else str(msg.content))
+                            yield AgentEvent("answer", content=msg.text)
                     elif isinstance(msg, ToolMessage):
                         yield AgentEvent("tool_result", msg.name or "", content=str(msg.content))
 

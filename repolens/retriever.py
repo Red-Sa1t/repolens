@@ -12,7 +12,8 @@ from langchain_core.vectorstores import VectorStore
 from pydantic import ConfigDict, PrivateAttr
 from rank_bm25 import BM25Plus
 
-_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+|[一-鿿]")
+DOC_LANGUAGES = {"markdown", "rst", "latex"}
+_TOKEN_RE =re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+|[一-鿿]")
 _CAMEL_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 
 
@@ -61,6 +62,8 @@ class HybridRetriever(BaseRetriever):
     k: int = 6
     fetch_k: int = 20
     rrf_k: int = 60
+    # 文档类片段（README 等）适当降权：讲解代码时优先引用源码本身
+    doc_weight: float = 0.8
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun) -> list[Document]:
@@ -75,6 +78,7 @@ class HybridRetriever(BaseRetriever):
             for rank, doc in enumerate(results):
                 key = doc.id or f"{doc.metadata.get('source')}:{doc.metadata.get('start_line')}"
                 by_id[key] = doc
-                scores[key] = scores.get(key, 0.0) + 1.0 / (self.rrf_k + rank + 1)
+                weight = self.doc_weight if doc.metadata.get("language") in DOC_LANGUAGES else 1.0
+                scores[key] = scores.get(key, 0.0) + weight / (self.rrf_k + rank + 1)
         top = sorted(scores, key=scores.get, reverse=True)[: self.k]
         return [by_id[key] for key in top]

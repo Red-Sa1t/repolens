@@ -49,6 +49,10 @@ def _ollama_embeddings(model: str, base_url: str) -> Embeddings:
 
 def get_embeddings(settings: Settings) -> Embeddings | None:
     """返回本地向量模型；Ollama 不可用时返回 None，检索自动降级为纯 BM25。"""
+    # 先用带超时的列表接口探测：Ollama 未启动时 embed 请求可能长时间挂起
+    base = settings.embed_model.split(":")[0]
+    if not any(m.split(":")[0] == base for m in list_ollama_models(settings.ollama_base_url)):
+        return None
     try:
         emb = _ollama_embeddings(settings.embed_model, settings.ollama_base_url)
         emb.embed_query("ping")

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RepoLens</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="app.css" />
+  <script>
+    // 在首帧渲染前确定主题，避免闪烁
+    (function () {
+      try {
+        var t = localStorage.getItem("rl.theme");
+        if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = t;
+      } catch (e) { document.documentElement.dataset.theme = "light"; }
+    })();
+  </script>
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- ============ 侧边栏 ============ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-logo" data-icon="logo"></span>
+        <div>
+          <div class="brand-name">RepoLens</div>
+          <div class="brand-sub" data-i18n="brand.tagline"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-block btn-soft" id="btn-new-repo">
+        <span data-icon="plus"></span><span data-i18n="sidebar.open"></span>
+      </button>
+
+      <section class="repo-card" id="repo-card" hidden>
+        <div class="repo-card-head">
+          <span class="repo-icon" data-icon="repo"></span>
+          <div class="repo-meta">
+            <div class="repo-name" id="repo-name"></div>
+            <div class="repo-source" id="repo-source"></div>
+          </div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><b id="stat-files">0</b><span data-i18n="stat.files"></span></div>
+          <div class="stat"><b id="stat-chunks">0</b><span data-i18n="stat.chunks"></span></div>
+          <div class="stat"><b id="stat-lines">0</b><span data-i18n="stat.lines"></span></div>
+        </div>
+        <div class="lang-bar" id="lang-bar"></div>
+        <div class="lang-legend" id="lang-legend"></div>
+        <div class="badge-row"><span class="badge" id="retrieval-badge"></span></div>
+      </section>
+
+      <section class="side-section">
+        <div class="side-title" data-i18n="sidebar.recent"></div>
+        <div class="recent-list" id="recent-list"></div>
+      </section>
+
+      <div class="side-foot">
+        <div class="status-line" id="status-embed"></div>
+        <div class="status-line" id="status-ollama"></div>
+        <a class="side-link" href="https://github.com/Red-Sa1t/repolens" target="_blank" rel="noopener">
+          <span data-icon="github"></span>GitHub
+        </a>
+      </div>
+    </aside>
+
+    <!-- ============ 主区域 ============ -->
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="btn-menu" data-i18n-title="top.menu"><span data-icon="menu"></span></button>
+        <nav class="tabs" id="tabs">
+          <button class="tab" data-view="chat"><span data-icon="chat"></span><span data-i18n="tab.chat"></span></button>
+          <button class="tab" data-view="tour"><span data-icon="map"></span><span data-i18n="tab.tour"></span></button>
+          <button class="tab" data-view="files"><span data-icon="file"></span><span data-i18n="tab.files"></span></button>
+        </nav>
+        <div class="top-actions">
+          <button class="model-pill" id="btn-model">
+            <span class="dot" id="model-dot"></span>
+            <span id="model-label"></span>
+            <span data-icon="chevron-down"></span>
+          </button>
+          <button class="icon-btn" id="btn-lang" data-i18n-title="top.lang"><span class="lang-text" id="lang-text"></span></button>
+          <button class="icon-btn" id="btn-theme" data-i18n-title="top.theme"><span data-icon="sun" class="ic-light"></span><span data-icon="moon" class="ic-dark"></span></button>
+        </div>
+      </header>
+
+      <!-- 欢迎页 / 加载仓库 -->
+      <section class="view view-welcome" id="view-welcome">
+        <div class="welcome">
+          <div class="hero-badge"><span data-icon="sparkles"></span><span data-i18n="hero.badge"></span></div>
+          <h1 class="hero-title" data-i18n-html="hero.title"></h1>
+          <p class="hero-sub" data-i18n="hero.sub"></p>
+
+          <form class="load-box" id="load-form">
+            <span class="load-icon" data-icon="search"></span>
+            <input id="load-input" autocomplete="off" spellcheck="false" />
+            <label class="force-toggle" data-i18n-title="load.force_tip">
+              <input type="checkbox" id="load-force" /><span data-i18n="load.force"></span>
+            </label>
+            <button class="btn btn-primary" type="submit" id="load-btn"><span data-i18n="load.go"></span><span data-icon="arrow-right"></span></button>
+          </form>
+
+          <div class="progress" id="load-progress" hidden>
+            <div class="progress-track"><div class="progress-fill" id="load-fill"></div></div>
+            <div class="progress-text" id="load-text"></div>
+          </div>
+          <div class="load-error" id="load-error" hidden></div>
+
+          <div class="quick-row">
+            <span class="quick-label" data-i18n="load.try"></span>
+            <button class="chip" id="try-self"><span data-icon="logo"></span><span data-i18n="load.self"></span></button>
+            <button class="chip" data-example="https://github.com/pallets/itsdangerous"><span data-icon="github"></span>pallets/itsdangerous</button>
+            <button class="chip" data-example="https://github.com/psf/requests"><span data-icon="github"></span>psf/requests</button>
+          </div>
+
+          <div class="feature-grid">
+            <div class="feature"><span class="feature-icon fi-1" data-icon="quote"></span><h3 data-i18n="feat.qa.t"></h3><p data-i18n="feat.qa.d"></p></div>
+            <div class="feature"><span class="feature-icon fi-2" data-icon="bot"></span><h3 data-i18n="feat.agent.t"></h3><p data-i18n="feat.agent.d"></p></div>
+            <div class="feature"><span class="feature-icon fi-3" data-icon="map"></span><h3 data-i18n="feat.tour.t"></h3><p data-i18n="feat.tour.d"></p></div>
+            <div class="feature"><span class="feature-icon fi-4" data-icon="shield"></span><h3 data-i18n="feat.local.t"></h3><p data-i18n="feat.local.d"></p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 对话 -->
+      <section class="view view-chat" id="view-chat" hidden>
+        <div class="chat-scroll" id="chat-scroll">
+          <div class="chat-inner" id="chat-list"></div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer" id="composer">
+            <textarea id="chat-input" rows="1"></textarea>
+            <div class="composer-bar">
+              <div class="seg" id="mode-seg">
+                <button data-mode="ask"><span data-icon="quote"></span><span data-i18n="mode.ask"></span></button>
+                <button data-mode="agent"><span data-icon="bot"></span><span data-i18n="mode.agent"></span></button>
+              </div>
+              <span class="composer-hint" id="mode-hint"></span>
+              <button class="icon-btn subtle" id="btn-clear" data-i18n-title="chat.clear"><span data-icon="trash"></span></button>
+              <button class="send-btn" id="btn-send"><span data-icon="send" class="ic-send"></span><span data-icon="stop" class="ic-stop"></span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 项目导览 -->
+      <section class="view view-tour" id="view-tour" hidden>
+        <div class="doc-toolbar">
+          <div>
+            <h2 class="doc-title" data-i18n="tour.title"></h2>
+            <div class="doc-sub" data-i18n="tour.sub"></div>
+          </div>
+          <div class="toolbar-actions">
+            <button class="btn btn-ghost" id="tour-copy" hidden><span data-icon="copy"></span><span data-i18n="common.copy"></span></button>
+            <button class="btn btn-ghost" id="tour-download" hidden><span data-icon="download"></span>Markdown</button>
+            <button class="btn btn-primary" id="tour-generate"><span data-icon="sparkles"></span><span id="tour-generate-label"></span></button>
+          </div>
+        </div>
+        <div class="doc-scroll">
+          <article class="doc md" id="tour-doc"></article>
+        </div>
+      </section>
+
+      <!-- 文件讲解 -->
+      <section class="view view-files" id="view-files" hidden>
+        <div class="files-layout">
+          <div class="pane pane-tree">
+            <div class="tree-search"><span data-icon="search"></span><input id="tree-filter" spellcheck="false" /></div>
+            <div class="tree" id="file-tree"></div>
+          </div>
+          <div class="pane pane-code">
+            <div class="pane-head">
+              <div class="crumbs" id="code-path"></div>
+              <span class="pane-meta" id="code-meta"></span>
+            </div>
+            <div class="code-wrap" id="code-view"></div>
+          </div>
+          <div class="pane pane-explain">
+            <div class="pane-head">
+              <div class="pane-title"><span data-icon="sparkles"></span><span data-i18n="files.explain_title"></span></div>
+              <button class="btn btn-primary btn-sm" id="btn-explain" disabled><span id="btn-explain-label"></span></button>
+            </div>
+            <div class="explain-body md" id="explain-body"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 代码预览抽屉 -->
+  <div class="drawer-mask" id="drawer-mask" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-path" id="drawer-path"></div>
+        <div class="drawer-sub" id="drawer-sub"></div>
+      </div>
+      <div class="drawer-actions">
+        <button class="btn btn-ghost btn-sm" id="drawer-open"><span data-icon="file"></span><span data-i18n="drawer.open"></span></button>
+        <button class="icon-btn" id="drawer-close"><span data-icon="x"></span></button>
+      </div>
+    </div>
+    <div class="code-wrap" id="drawer-code"></div>
+  </aside>
+
+  <!-- 模型设置 -->
+  <div class="modal-mask" id="model-modal" hidden>
+    <div class="modal" role="dialog">
+      <div class="modal-head">
+        <h3 data-i18n="model.title"></h3>
+        <button class="icon-btn" data-close><span data-icon="x"></span></button>
+      </div>
+      <div class="provider-grid">
+        <label class="provider-card" data-provider="deepseek">
+          <input type="radio" name="provider" value="deepseek" />
+          <span class="provider-icon pi-cloud" data-icon="cloud"></span>
+          <b>DeepSeek</b><small data-i18n="model.deepseek_d"></small>
+        </label>
+        <label class="provider-card" data-provider="ollama">
+          <input type="radio" name="provider" value="ollama" />
+          <span class="provider-icon pi-local" data-icon="cpu"></span>
+          <b>Ollama</b><small data-i18n="model.ollama_d"></small>
+        </label>
+      </div>
+      <div class="field">
+        <label data-i18n="model.model"></label>
+        <select id="model-select"></select>
+        <div class="field-hint" id="model-hint"></div>
+      </div>
+      <div class="field" id="key-field">
+        <label>DeepSeek API Key</label>
+        <input id="key-input" type="password" placeholder="sk-..." autocomplete="off" />
+        <div class="field-hint" id="key-hint"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" data-close data-i18n="common.cancel"></button>
+        <button class="btn btn-primary" id="model-save" data-i18n="common.save"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toasts"></div>
+
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <script src="i18n.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
